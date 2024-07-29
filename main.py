@@ -26,7 +26,7 @@ channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 gemini_key = os.getenv('GEMINI_API_KEY')
 firebase_url = os.getenv('FIREBASE_URL')
-imgage_prompt = '''
+image_prompt = '''
 This is a receipt, and you are a secretary. 
 Please organize the details from the receipt into JSON format for me. 
 I only need the JSON representation of the receipt data. Eventually, 
@@ -148,7 +148,7 @@ async def handle_callback(request: Request):
 
             # Using Gemini-Vision process image and get the JSON representation of the receipt data.
             result = generate_json_from_receipt_image(
-                img, imgage_prompt)
+                img, image_prompt)
             print(f"Before Translate Result: {result.text}")
             tw_result = generate_gemini_text_complete(
             #     result.text + "\n --- " + json_translate_from_korean_chinese_prompt)
