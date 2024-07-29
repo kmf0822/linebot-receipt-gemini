@@ -19,7 +19,57 @@ import json
 import aiohttp
 import PIL.Image
 from firebase import firebase
+from models import OpenAIModel
+import base64
 
+# Initialize the Azure OpenAI client
+openai_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+openai_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+openai_model_engine = os.getenv("AZURE_OPENAI_MODEL_ENGINE")
+
+if openai_api_key is None:
+    print('Specify AZURE_OPENAI_API_KEY as environment variable.')
+    sys.exit(1)
+if openai_endpoint is None:
+    print('Specify AZURE_OPENAI_ENDPOINT as environment variable.')
+    sys.exit(1)
+
+openai_client = OpenAIModel(api_key=openai_api_key)
+
+# Replace the generate_gemini_text_complete function
+def generate_azure_openai_text_complete(prompt):
+    """
+    Generate a text completion using the Azure OpenAI model.
+    """
+    response = openai_client.chat_completions(
+        model_engine=openai_model_engine,
+        messages=prompt
+    )
+    return response
+
+# Replace the generate_json_from_receipt_image function
+def generate_json_from_receipt_image(img, prompt):
+    """
+    Generate a JSON representation of the receipt data from the image using the Azure OpenAI model.
+
+    :param img: image of the receipt.
+    :param prompt: prompt for the generative model.
+    :return: the generated JSON representation of the receipt data.
+    """
+    # Convert image to base64 string
+    buffered = BytesIO()
+    img.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    # Combine prompt and image data
+    combined_prompt = f"{prompt}\nImage: {img_str}"
+
+    response = openai_client.chat_completions(
+        model_engine=openai_model_engine,
+        messages=combined_prompt,
+        # max_tokens=1000
+    )
+    return response
 
 # get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -87,7 +137,6 @@ fdb = firebase.FirebaseApplication(firebase_url, None)
 # Initialize the Gemini Pro API
 genai.configure(api_key=gemini_key)
 
-
 @app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
@@ -114,7 +163,7 @@ async def handle_callback(request: Request):
         global user_all_receipts_path
         user_all_receipts_path = f'receipt_helper/{user_id}'
 
-        if (event.message.type == "text"):
+        if event.message.type == "text":
             all_receipts = fdb.get(user_all_receipts_path, None)
 
             # Provide a default value for reply_msg
@@ -130,15 +179,18 @@ async def handle_callback(request: Request):
                 # fmt: on
                 messages = []
                 messages.append(
-                    {"role": "user", "parts": prompt_msg})
-                response = generate_gemini_text_complete(messages)
-                reply_msg = TextSendMessage(text=response.text)
+                    # {"role": "user", "parts": prompt_msg},
+                    {"type": "text", "text": prompt_msg}
+                )
+
+                response = generate_azure_openai_text_complete(messages)
+                reply_msg = TextSendMessage(text=response)
 
             await line_bot_api.reply_message(
                 event.reply_token,
                 reply_msg
             )
-        elif (event.message.type == "image"):
+        elif event.message.type == "image":
             message_content = await line_bot_api.get_message_content(
                 event.message.id)
             image_content = b''
@@ -146,21 +198,18 @@ async def handle_callback(request: Request):
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
 
-            # Using Gemini-Vision process image and get the JSON representation of the receipt data.
-            result = generate_json_from_receipt_image(
-                img, image_prompt)
-            print(f"Before Translate Result: {result.text}")
-            tw_result = generate_gemini_text_complete(
-            #     result.text + "\n --- " + json_translate_from_korean_chinese_prompt)
-            # tw_result = generate_gemini_text_complete(
-                result.text + "\n --- " + json_translate_from_japanese_chinese_prompt)
-            print(f"After Translate Result: {tw_result.text}")
+            # Using Azure OpenAI process image and get the JSON representation of the receipt data.
+            result = generate_json_from_receipt_image(img, image_prompt)
+            print(f"Before Translate Result: {result}")
+            tw_result = generate_azure_openai_text_complete(
+                result + "\n --- " + json_translate_from_japanese_chinese_prompt)
+            print(f"After Translate Result: {tw_result}")
 
             # Check if receipt_data is not None
             items, receipt = extract_receipt_data(
-                parse_receipt_json(result.text))
+                parse_receipt_json(result))
             tw_items, tw_receipt = extract_receipt_data(
-                parse_receipt_json(tw_result.text))
+                parse_receipt_json(tw_result))
 
             # Call the add_receipt function with the extracted information
             add_receipt(receipt_data=tw_receipt,
@@ -181,27 +230,27 @@ async def handle_callback(request: Request):
     return 'OK'
 
 
-def generate_gemini_text_complete(prompt):
-    """
-    Generate a text completion using the generative model.
-    """
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
-    return response
-
-
-def generate_json_from_receipt_image(img, prompt):
-    """
-    Generate a JSON representation of the receipt data from the image using the generative model.
-
-    :param img: image of the receipt.
-    :param prompt: prompt for the generative model.
-    :return: the generated JSON representation of the receipt data.
-    """
-    model = genai.GenerativeModel('gemini-pro-vision')
-    response = model.generate_content([prompt, img], stream=True)
-    response.resolve()
-    return response
+# def generate_gemini_text_complete(prompt):
+#     """
+#     Generate a text completion using the generative model.
+#     """
+#     model = genai.GenerativeModel('gemini-pro')
+#     response = model.generate_content(prompt)
+#     return response
+#
+#
+# def generate_json_from_receipt_image(img, prompt):
+#     """
+#     Generate a JSON representation of the receipt data from the image using the generative model.
+#
+#     :param img: image of the receipt.
+#     :param prompt: prompt for the generative model.
+#     :return: the generated JSON representation of the receipt data.
+#     """
+#     model = genai.GenerativeModel('gemini-pro-vision')
+#     response = model.generate_content([prompt, img], stream=True)
+#     response.resolve()
+#     return response
 
 
 def add_receipt(receipt_data, items):
