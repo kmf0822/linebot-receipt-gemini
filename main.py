@@ -390,3 +390,12 @@ def get_receipt_flex_msg(receipt_data, items):
     print("flex:", flex_msg)
     return FlexSendMessage(
         alt_text="Receipt Data", contents=flex_msg)
+
+
+@app.get("/")
+def home():
+    return 'Hello World'
+
+
+if __name__ == "__main__":
+    pass

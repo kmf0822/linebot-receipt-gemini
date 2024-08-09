@@ -1,10 +1,10 @@
-line-bot-sdk==3.5.0
 fastapi
-uvicorn[standard]
-google.generativeai
-yfinance
+firebase_admin
+git+https://github.com/ozgur/python-firebase
+google-generativeai
+line-bot-sdk==3.11.0
+Pillow
 pydantic
 tiktoken
-Pillow
-git+https://github.com/ozgur/python-firebase
-firebase_admin
+uvicorn[standard]
+# yfinance
