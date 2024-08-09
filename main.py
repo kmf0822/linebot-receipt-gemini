@@ -185,7 +185,8 @@ def generate_gemini_text_complete(prompt):
     """
     Generate a text completion using the generative model.
     """
-    model = genai.GenerativeModel('gemini-pro')
+    # model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-pro-001')
     response = model.generate_content(prompt)
     return response
 
