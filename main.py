@@ -22,20 +22,25 @@ from linebot.models import FlexSendMessage
 from linebot.models import (
     MessageEvent, TextSendMessage
 )
-# 从环境变量中读取密钥内容
+# Load service account info from environment variable
 service_account_info = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-
-# 将JSON字符串加载为Python字典
+if not service_account_info:
+    raise ValueError("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable is not set")
+# Convert JSON string to dictionary
 service_account_dict = json.loads(service_account_info)
-
-# 使用字典初始化Firebase Admin SDK
+# Initialize Firebase Admin SDK
 cred = credentials.Certificate(service_account_dict)
 firebase_admin.initialize_app(cred)
+# Verify Firebase URL
+firebase_url = os.getenv('FIREBASE_URL')
+if not firebase_url:
+    raise ValueError("FIREBASE_URL environment variable is not set")
+print("Firebase Admin SDK initialized successfully")
+
 # get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
 gemini_key = os.getenv('GEMINI_API_KEY')
-firebase_url = os.getenv('FIREBASE_URL')
 image_prompt = '''
 This is a receipt, and you are a secretary. 
 Please organize the details from the receipt into JSON format for me. 
