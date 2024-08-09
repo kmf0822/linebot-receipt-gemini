@@ -1,26 +1,36 @@
+import PIL.Image
+import aiohttp
+import firebase_admin
+import google.generativeai as genai
+import json
+import json
+import os
+import os
+import sys
+from fastapi import Request, FastAPI, HTTPException
+from firebase import firebase
+from firebase_admin import credentials
+from io import BytesIO
+from linebot import (
+    AsyncLineBotApi, WebhookParser
+)
+from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
+from linebot.exceptions import (
+    InvalidSignatureError
+)
 from linebot.models import FlexSendMessage
 from linebot.models import (
     MessageEvent, TextSendMessage
 )
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot import (
-    AsyncLineBotApi, WebhookParser
-)
-from fastapi import Request, FastAPI, HTTPException
-import google.generativeai as genai
-import os
-import sys
-from io import BytesIO
-import json
+# 从环境变量中读取密钥内容
+service_account_info = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-import aiohttp
-import PIL.Image
-from firebase import firebase
+# 将JSON字符串加载为Python字典
+service_account_dict = json.loads(service_account_info)
 
-
+# 使用字典初始化Firebase Admin SDK
+cred = credentials.Certificate(service_account_dict)
+firebase_admin.initialize_app(cred)
 # get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
