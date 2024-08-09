@@ -7,3 +7,4 @@ pydantic
 tiktoken
 Pillow
 git+https://github.com/ozgur/python-firebase
+firebase_admin
