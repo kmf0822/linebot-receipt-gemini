@@ -215,7 +215,8 @@ def generate_json_from_receipt_image(img, prompt):
     :return: the generated JSON representation of the receipt data.
     """
     # model = genai.GenerativeModel('gemini-pro-vision')
-    model = genai.GenerativeModel('gemini-1.5-pro-001')
+    # model = genai.GenerativeModel('gemini-1.5-pro-001')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     response = model.generate_content([prompt, img], stream=True)
     response.resolve()
     return response
