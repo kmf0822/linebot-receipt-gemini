@@ -114,7 +114,7 @@ async def handle_callback(request: Request):
         global user_all_receipts_path
         user_all_receipts_path = f'receipt_helper/{user_id}'
 
-        if (event.message.type == "text"):
+        if event.message.type == "text":
             all_receipts = fdb.get(user_all_receipts_path, None)
 
             # Provide a default value for reply_msg

@@ -129,7 +129,7 @@ async def handle_callback(request: Request):
         global user_all_receipts_path
         user_all_receipts_path = f'receipt_helper/{user_id}'
 
-        if (event.message.type == "text"):
+        if event.message.type == "text":
             all_receipts = fdb.get(user_all_receipts_path, None)
 
             # Provide a default value for reply_msg
@@ -153,7 +153,7 @@ async def handle_callback(request: Request):
                 event.reply_token,
                 reply_msg
             )
-        elif (event.message.type == "image"):
+        elif event.message.type == "image":
             message_content = await line_bot_api.get_message_content(
                 event.message.id)
             image_content = b''
