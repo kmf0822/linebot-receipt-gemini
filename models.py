@@ -20,19 +20,10 @@ class ModelInterface:
 
 class OpenAIModel(ModelInterface):
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: str, api_version: str = "2024-05-01-preview"):
         self.api_key = api_key
-        # self.api_key = "73ba3ef13d7f4d38a66ab055797570e7"
-        # self.base_url = 'https://api.openai.com/v1'
-
-        self.base_url = 'https://openai-workspace-22.openai.azure.com/openai'
-        # self.base_url = 'https://openai-workspace-22.openai.azure.com/openai/deployments/gpt-4-8K'
-        # self.api_type = "azure"
-        # self.api_base = "https://openai-workspace-22.openai.azure.com/"
-        self.api_version = "2024-05-01-preview"
-        # self.api_version = "2023-07-01-preview"
-        # self.api_key = os.getenv("OPENAI_API_KEY")
-        # https://openai-workspace-22.openai.azure.com/openai/deployments/gpt-4-8K/chat/completions?api-version=2023-07-01-preview
+        self.base_url = base_url
+        self.api_version = api_version
 
     def _request(self, method, endpoint, body=None, files=None):
         # self.headers = {'Authorization': f'Bearer {self.api_key}'}

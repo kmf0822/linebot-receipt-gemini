@@ -26,7 +26,7 @@ While traveling abroad, I often found myself puzzled by the contents of receipts
 - Python 3
 - FastAPI
 - LINE Messaging API
-- Google Generative AI
+- Azure OpenAI
 - Aiohttp
 - PIL (Python Imaging Library)
 - Firebase
@@ -37,7 +37,9 @@ While traveling abroad, I often found myself puzzled by the contents of receipts
 2. Set the following environment variables:
    - `ChannelSecret`: Your LINE channel secret.
    - `ChannelAccessToken`: Your LINE channel access token.
-   - `GEMINI_API_KEY`: Your Gemini API key for AI processing.
+   - `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key.
+   - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint.
+   - `AZURE_OPENAI_MODEL_ENGINE`: The deployed model name.
    - `FIREBASE_URL`: Your Firebase database URL.
 3. Install the required dependencies by running `pip install -r requirements.txt`.
 4. Start the FastAPI server with `uvicorn main:app --reload`.
