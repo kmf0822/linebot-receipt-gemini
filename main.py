@@ -1,10 +1,8 @@
 import PIL.Image
 import aiohttp
+import base64
 import firebase_admin
-import google.generativeai as genai
 import json
-import json
-import os
 import os
 import sys
 from fastapi import Request, FastAPI, HTTPException
@@ -22,6 +20,7 @@ from linebot.models import FlexSendMessage
 from linebot.models import (
     MessageEvent, TextSendMessage
 )
+from models import OpenAIModel
 # Load service account info from environment variable
 service_account_info = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 if not service_account_info:
@@ -40,7 +39,9 @@ print("Firebase Admin SDK initialized successfully")
 # get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
 channel_access_token = os.getenv('ChannelAccessToken', None)
-gemini_key = os.getenv('GEMINI_API_KEY')
+azure_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+azure_model_engine = os.getenv('AZURE_OPENAI_MODEL_ENGINE')
 image_prompt = '''
 This is a receipt, and you are a secretary. 
 Please organize the details from the receipt into JSON format for me. 
@@ -79,8 +80,8 @@ if channel_secret is None:
 if channel_access_token is None:
     print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
     sys.exit(1)
-if gemini_key is None:
-    print('Specify GEMINI_API_KEY as environment variable.')
+if azure_api_key is None or azure_endpoint is None or azure_model_engine is None:
+    print('Specify AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_MODEL_ENGINE as environment variables.')
     sys.exit(1)
 if firebase_url is None:
     print('Specify FIREBASE_URL as environment variable.')
@@ -99,8 +100,8 @@ user_item_path = f''
 user_all_receipts_path = f''
 fdb = firebase.FirebaseApplication(firebase_url, None)
 
-# Initialize the Gemini Pro API
-genai.configure(api_key=gemini_key)
+# Initialize Azure OpenAI client
+openai_client = OpenAIModel(api_key=azure_api_key, base_url=azure_endpoint)
 
 
 @app.post("/callback")
@@ -143,11 +144,9 @@ async def handle_callback(request: Request):
                 # fmt: off
                 prompt_msg = f'Here is my entire shopping list {all_receipts}; please answer my question based on this information. {msg}. Reply in zh_tw.'
                 # fmt: on
-                messages = []
-                messages.append(
-                    {"role": "user", "parts": prompt_msg})
-                response = generate_gemini_text_complete(messages)
-                reply_msg = TextSendMessage(text=response.text)
+                messages = [{"role": "user", "content": prompt_msg}]
+                response = generate_azure_openai_text_complete(messages)
+                reply_msg = TextSendMessage(text=response)
 
             await line_bot_api.reply_message(
                 event.reply_token,
@@ -161,21 +160,18 @@ async def handle_callback(request: Request):
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
 
-            # Using Gemini-Vision process image and get the JSON representation of the receipt data.
-            result = generate_json_from_receipt_image(
-                img, image_prompt)
-            print(f"Before Translate Result: {result.text}")
-            tw_result = generate_gemini_text_complete(
-            #     result.text + "\n --- " + json_translate_from_korean_chinese_prompt)
-            # tw_result = generate_gemini_text_complete(
-                result.text + "\n --- " + json_translate_from_japanese_chinese_prompt)
-            print(f"After Translate Result: {tw_result.text}")
+            # Using Azure OpenAI process image and get the JSON representation of the receipt data.
+            result = generate_json_from_receipt_image(img, image_prompt)
+            print(f"Before Translate Result: {result}")
+            tw_result = generate_azure_openai_text_complete(
+                result + "\n --- " + json_translate_from_japanese_chinese_prompt)
+            print(f"After Translate Result: {tw_result}")
 
             # Check if receipt_data is not None
             items, receipt = extract_receipt_data(
-                parse_receipt_json(result.text))
+                parse_receipt_json(result))
             tw_items, tw_receipt = extract_receipt_data(
-                parse_receipt_json(tw_result.text))
+                parse_receipt_json(tw_result))
 
             # Call the add_receipt function with the extracted information
             add_receipt(receipt_data=tw_receipt,
@@ -196,29 +192,31 @@ async def handle_callback(request: Request):
     return 'OK'
 
 
-def generate_gemini_text_complete(prompt):
-    """
-    Generate a text completion using the generative model.
-    """
-    # model = genai.GenerativeModel('gemini-1.5-pro-001')
-    model = genai.GenerativeModel('gemini-2.0-flash')
-    response = model.generate_content(prompt)
-    return response
+def generate_azure_openai_text_complete(prompt):
+    """Generate a text completion using Azure OpenAI."""
+    success, result, error = openai_client.chat_completions(
+        model_engine=azure_model_engine, messages=prompt
+    )
+    if success:
+        return result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"Error from Azure OpenAI: {error}")
+    return ""
 
 
 def generate_json_from_receipt_image(img, prompt):
-    """
-    Generate a JSON representation of the receipt data from the image using the generative model.
+    """Generate a JSON representation of the receipt data from the image."""
+    buffered = BytesIO()
+    img.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
 
-    :param img: image of the receipt.
-    :param prompt: prompt for the generative model.
-    :return: the generated JSON representation of the receipt data.
-    """
-    # model = genai.GenerativeModel('gemini-pro-vision')
-    model = genai.GenerativeModel('gemini-2.0-flash')
-    response = model.generate_content([prompt, img], stream=True)
-    response.resolve()
-    return response
+    combined_prompt = f"{prompt}\nImage: {img_str}"
+    success, result, error = openai_client.chat_completions(
+        model_engine=azure_model_engine, messages=combined_prompt
+    )
+    if success:
+        return result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    print(f"Error from Azure OpenAI: {error}")
+    return ""
 
 
 def add_receipt(receipt_data, items):
