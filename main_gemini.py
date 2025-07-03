@@ -228,7 +228,8 @@ def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexSendMessage:
 
 
 # ================= 主流程 =================
-@app.post("/")
+# @app.post("/")
+@app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers['X-Line-Signature']
     body = (await request.body()).decode()
@@ -282,3 +283,12 @@ async def handle_callback(request: Request):
         else:
             continue
     return 'OK'
+
+
+@app.get("/")
+def home():
+    return 'Hello World'
+
+
+if __name__ == "__main__":
+    pass
