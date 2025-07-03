@@ -263,8 +263,10 @@ async def handle_callback(request: Request):
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
             result = generate_json_from_receipt_image(img, image_prompt)
+            print(f"Before Translate Result: {result}")
             tw_result = generate_gemini_text_complete(
                 result.text + "\n --- " + json_translate_from_nonchinese_prompt)
+            print(f"After Translate Result: {tw_result}")
             items, receipt = extract_receipt_data(
                 parse_receipt_json(result.text))
             tw_items, tw_receipt = extract_receipt_data(
