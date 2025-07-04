@@ -25,10 +25,10 @@ openai_model_engine = os.getenv("AZURE_OPENAI_MODEL_ENGINE")
 firebase_url = os.getenv("FIREBASE_URL")
 
 image_prompt = """\
-This is a receipt, and you are a secretary.
-Please organize the details from the receipt into JSON format for me.
-I only need the JSON representation of the receipt data. Eventually,
-I will need to input it into a database with the following structure:
+This is a receipt, and you are a secretary. 
+Please organize the details from the receipt into JSON format for me. 
+I only need the JSON representation of the receipt data, no additional description is necessary. 
+Eventually, I will need to input it into a database with the following structure:
 
  Receipt(ReceiptID, PurchaseStore, PurchaseDate, PurchaseAddress, TotalAmount) and
  Items(ItemID, ReceiptID, ItemName, ItemPrice).
