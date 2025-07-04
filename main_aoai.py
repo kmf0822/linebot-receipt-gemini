@@ -97,7 +97,13 @@ def generate_json_from_receipt_image(img, prompt: str) -> str:
             "role": "user",
             "content": [
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{img_str}"},
+                {
+                    "type": "image_url",
+                    # "image_url": f"data:image/jpeg;base64,{img_str}"
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_str}"
+                    }
+                },
             ],
         }
     ]
