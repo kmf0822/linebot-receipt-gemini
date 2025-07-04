@@ -15,6 +15,7 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import FlexSendMessage, MessageEvent, TextSendMessage
 
 from models import OpenAIModel
+from src.logger import logger
 
 # Environment variables
 channel_secret = os.getenv("ChannelSecret")
@@ -56,7 +57,7 @@ for var, val in {
     "FIREBASE_URL": firebase_url,
 }.items():
     if val is None:
-        print(f"Specify {var} as environment variable.")
+        logger.error(f"Specify {var} as environment variable.")
         sys.exit(1)
 
 # Initialize Firebase Admin
@@ -84,7 +85,7 @@ def generate_aoai_text_complete(prompt: str) -> str:
     success, res, err = openai_client.chat_completions(messages, openai_model_engine)
     if success and res:
         return res.get("choices", [{}])[0].get("message", {}).get("content", "")
-    print(f"Azure OpenAI error: {err}")
+    logger.error(f"Azure OpenAI error: {err}")
     return ""
 
 
@@ -110,7 +111,7 @@ def generate_json_from_receipt_image(img, prompt: str) -> str:
     success, res, err = openai_client.chat_completions(messages, openai_model_engine)
     if success and res:
         return res.get("choices", [{}])[0].get("message", {}).get("content", "")
-    print(f"Azure OpenAI error: {err}")
+    logger.error(f"Azure OpenAI error: {err}")
     return ""
 
 
@@ -122,9 +123,9 @@ def add_receipt(receipt_data: dict, items: list, user_receipt_path: str, user_it
         for item in items:
             item_id = item.get("ItemID")
             db.reference(user_item_path).child(item_id).set(item)
-        print(f"Add ReceiptID: {receipt_id} completed.")
+        logger.info(f"Add ReceiptID: {receipt_id} completed.")
     except Exception as e:
-        print(f"Error in add_receipt: {e}")
+        logger.error(f"Error in add_receipt: {e}")
 
 
 def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
@@ -132,7 +133,7 @@ def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
         receipt = db.reference(user_receipt_path).child(receipt_id).get()
         return receipt is not None
     except Exception as e:
-        print(f"Error in check_if_receipt_exists: {e}")
+        logger.error(f"Error in check_if_receipt_exists: {e}")
         return False
 
 
@@ -142,15 +143,14 @@ def parse_receipt_json(receipt_json_str: str):
         # 检查输入是否为有效的 JSON 字符串
         lines = receipt_json_str.strip().split('\n')
         if len(lines) < 2:
-            raise ValueError("JSON 数据格式不正确，缺少必要的内容")
-
+            raise ValueError("JSON 資料格式不正確，缺少必要的內容")
         json_str = '\n'.join(lines[1:-1])
         receipt_data = json.loads(json_str)
         return receipt_data
     except json.JSONDecodeError as e:
-        print(f"JSONDecodeError: {e.msg} at line {e.lineno}, column {e.colno}")
+        logger.error(f"JSONDecodeError: {e.msg} at line {e.lineno}, column {e.colno}")
     except Exception as e:
-        print(f"Error parsing JSON: {e}")
+        logger.error(f"Error parsing JSON: {e}")
     return None
 
 
@@ -226,6 +226,9 @@ async def handle_callback(request: Request):
         user_all_receipts_path = f"receipt_helper/{user_id}"
 
         if event.message.type == "text":
+            user_id = event.source.user_id
+            text = event.message.text.strip()
+            logger.info(f'{user_id}: [{openai_model_engine}]{text}')
             all_receipts = db.reference(user_all_receipts_path).get()
             reply_msg = TextSendMessage(text="No message to reply with")
             msg = event.message.text
@@ -239,6 +242,7 @@ async def handle_callback(request: Request):
                 )
                 response_text = generate_aoai_text_complete(prompt_msg)
                 reply_msg = TextSendMessage(text=response_text)
+            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}]{msg.text}')
             await line_bot_api.reply_message(event.reply_token, reply_msg)
         elif event.message.type == "image":
             message_content = await line_bot_api.get_message_content(event.message.id)
@@ -247,16 +251,17 @@ async def handle_callback(request: Request):
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
             result_text = generate_json_from_receipt_image(img, image_prompt)
-            print(f"Before Translate Result: {result_text}")
+            # logger.debug(f"Before Translate Result: {result_text}")
+            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}] Before Translate Result: {result_text}')
             tw_result_text = generate_aoai_text_complete(
                 result_text + "\n --- " + json_translate_from_nonchinese_prompt
             )
-            print(f"After Translate Result: {tw_result_text}")
+            # logger.debug(f"After Translate Result: {tw_result_text}")
+            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}]{tw_result_text} After Translate Result: {tw_result_text}')
             items, receipt = extract_receipt_data(parse_receipt_json(result_text))
             if receipt is None:
-                print("解析收据数据失败，无法继续处理")
-                await line_bot_api.reply_message(event.reply_token,
-                                                 TextSendMessage(text="收据数据解析失败，请检查图片或数据格式"))
+                logger.warning("解析收據資料失敗，無法繼續處理")
+                await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
                 return "OK"
             tw_items, tw_receipt = extract_receipt_data(parse_receipt_json(tw_result_text))
             if check_if_receipt_exists(receipt.get("ReceiptID"), user_receipt_path):
