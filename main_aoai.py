@@ -139,13 +139,19 @@ def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
 # ================= Data Processing =================
 def parse_receipt_json(receipt_json_str: str):
     try:
+        # 检查输入是否为有效的 JSON 字符串
         lines = receipt_json_str.strip().split('\n')
+        if len(lines) < 2:
+            raise ValueError("JSON 数据格式不正确，缺少必要的内容")
+
         json_str = '\n'.join(lines[1:-1])
         receipt_data = json.loads(json_str)
         return receipt_data
     except json.JSONDecodeError as e:
+        print(f"JSONDecodeError: {e.msg} at line {e.lineno}, column {e.colno}")
+    except Exception as e:
         print(f"Error parsing JSON: {e}")
-        return None
+    return None
 
 
 def extract_receipt_data(receipt_json_obj: dict):
@@ -247,6 +253,11 @@ async def handle_callback(request: Request):
             )
             print(f"After Translate Result: {tw_result_text}")
             items, receipt = extract_receipt_data(parse_receipt_json(result_text))
+            if receipt is None:
+                print("解析收据数据失败，无法继续处理")
+                await line_bot_api.reply_message(event.reply_token,
+                                                 TextSendMessage(text="收据数据解析失败，请检查图片或数据格式"))
+                return "OK"
             tw_items, tw_receipt = extract_receipt_data(parse_receipt_json(tw_result_text))
             if check_if_receipt_exists(receipt.get("ReceiptID"), user_receipt_path):
                 reply_msg = get_receipt_flex_msg(receipt, items)
