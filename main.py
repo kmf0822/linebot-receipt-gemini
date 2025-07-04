@@ -141,14 +141,14 @@ def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
 def parse_receipt_json(receipt_json_str: str):
     try:
         logger.debug(f"{receipt_json_str = }")
-        if receipt_json_str.startswith("```json"):
-            # 如果字符串以 ```json 开头，则去掉开头和结尾的 ```json 和 ```
-            receipt_json_str = receipt_json_str[7:].strip()
-            if receipt_json_str.endswith("```"):
-                receipt_json_str = receipt_json_str[:-3].strip()
         # 检查输入是否为有效的 JSON 字符串
-        lines = receipt_json_str.strip().split('\n')
-        logger.debug(f"{lines[1:-1] = }")
+        lines = receipt_json_str.strip().split('\n')[1:-1]
+        logger.debug(f"{lines = }")
+        # if receipt_json_str.startswith("```json"):
+        #     # 如果字符串以 ```json 开头，则去掉开头和结尾的 ```json 和 ```
+        #     receipt_json_str = receipt_json_str[7:].strip()
+        #     if receipt_json_str.endswith("```"):
+        #         receipt_json_str = receipt_json_str[:-3].strip()
         if len(lines) < 2:
             raise ValueError("JSON 資料格式不正確，缺少必要的內容")
         if not f"{lines[0]}".startswith('{'):
