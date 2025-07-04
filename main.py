@@ -149,6 +149,7 @@ def parse_receipt_json(receipt_json_str: str):
         return receipt_data
     except json.JSONDecodeError as e:
         logger.error(f"JSONDecodeError: {e.msg} at line {e.lineno}, column {e.colno}")
+        logger.error(f"{receipt_json_str = }")
     except Exception as e:
         logger.error(f"Error parsing JSON: {e}")
     return None
