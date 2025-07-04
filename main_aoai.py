@@ -153,11 +153,13 @@ def parse_receipt_json(receipt_json_str: str):
             # 如果lines[-1]不是'}'结尾，则在lines[-1]追加'}'
             lines[-1] = lines[-1] + '}'
         try:
-            json_str = '\n'.join(lines[1:-1])
+            # json_str = '\n'.join(lines[1:-1])
+            json_str = '\n'.join(lines)
             logger.debug(f"{json_str = }")
             receipt_data = json.loads(json_str)
         except:
-            json_str = ' '.join(lines[1:-1])
+            # json_str = ' '.join(lines[1:-1])
+            json_str = ' '.join(lines)
             logger.debug(f"{json_str = }")
             receipt_data = json.loads(json_str)
         return receipt_data
