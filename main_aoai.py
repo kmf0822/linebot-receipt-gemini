@@ -1,11 +1,11 @@
+import base64
+import json
 import os
 import sys
-import json
-import base64
 from io import BytesIO
 
-import aiohttp
 import PIL.Image
+import aiohttp
 import firebase_admin
 from fastapi import FastAPI, HTTPException, Request
 from firebase_admin import credentials, db
@@ -59,8 +59,10 @@ for var, val in {
         print(f"Specify {var} as environment variable.")
         sys.exit(1)
 
-# Configure Firebase
-cred = credentials.ApplicationDefault()
+# Initialize Firebase Admin
+# cred = credentials.ApplicationDefault()
+cred_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
+cred = credentials.Certificate(cred_info)
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
 
@@ -74,6 +76,7 @@ parser = WebhookParser(channel_secret)
 # Initialize Azure OpenAI client
 openai_client = OpenAIModel(api_key=openai_api_key)
 os.environ["OPENAI_MODEL_ENGINE"] = openai_model_engine
+
 
 # ================= Azure OpenAI =================
 def generate_aoai_text_complete(prompt: str) -> str:
@@ -104,6 +107,7 @@ def generate_json_from_receipt_image(img, prompt: str) -> str:
     print(f"Azure OpenAI error: {err}")
     return ""
 
+
 # ================= Firebase =================
 def add_receipt(receipt_data: dict, items: list, user_receipt_path: str, user_item_path: str):
     try:
@@ -124,6 +128,7 @@ def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
     except Exception as e:
         print(f"Error in check_if_receipt_exists: {e}")
         return False
+
 
 # ================= Data Processing =================
 def parse_receipt_json(receipt_json_str: str):
@@ -146,6 +151,7 @@ def extract_receipt_data(receipt_json_obj: dict):
             receipt_obj = receipt_obj[0]
         items = receipt_json_obj.get("Items", [])
     return items, receipt_obj
+
 
 # ================= Flex Message =================
 def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexSendMessage:
@@ -187,6 +193,7 @@ def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexSendMessage:
         "styles": {"footer": {"separator": True}},
     }
     return FlexSendMessage(alt_text="Receipt Data", contents=flex_msg)
+
 
 # ================= Main Flow =================
 @app.post("/callback")
