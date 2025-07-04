@@ -140,11 +140,14 @@ def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
 # ================= Data Processing =================
 def parse_receipt_json(receipt_json_str: str):
     try:
+        logger.debug(f"{receipt_json_str = }")
         # 检查输入是否为有效的 JSON 字符串
         lines = receipt_json_str.strip().split('\n')
+        logger.debug(f"{lines = }")
         if len(lines) < 2:
             raise ValueError("JSON 資料格式不正確，缺少必要的內容")
-        json_str = '\n'.join(lines[1:-1])
+        # json_str = '\n'.join(lines[1:-1])
+        json_str = ' '.join(lines[1:-1])
         receipt_data = json.loads(json_str)
         return receipt_data
     except json.JSONDecodeError as e:
