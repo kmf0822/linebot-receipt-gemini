@@ -146,6 +146,12 @@ def parse_receipt_json(receipt_json_str: str):
         logger.debug(f"{lines[1:-1] = }")
         if len(lines) < 2:
             raise ValueError("JSON 資料格式不正確，缺少必要的內容")
+        if not f"{lines[0]}".startswith('{'):
+            # 如果lines[0]不是'{'开头，则在lines[0]插入'{'
+            lines[0] = '{' + lines[0]
+        if not f"{lines[-1]}".endswith('}'):
+            # 如果lines[-1]不是'}'结尾，则在lines[-1]追加'}'
+            lines[-1] = lines[-1] + '}'
         try:
             json_str = '\n'.join(lines[1:-1])
             logger.debug(f"{json_str = }")
