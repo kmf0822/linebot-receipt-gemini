@@ -76,7 +76,9 @@ user_item_path = f''
 user_all_receipts_path = f''
 
 # Initialize Firebase Admin
-cred = credentials.ApplicationDefault()
+# cred = credentials.ApplicationDefault()
+cred_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
+cred = credentials.Certificate(cred_info)
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
 
