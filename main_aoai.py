@@ -281,6 +281,10 @@ async def handle_callback(request: Request):
                 await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
                 return "OK"
             tw_items, tw_receipt = extract_receipt_data(parse_receipt_json(tw_result_text))
+            if tw_receipt is None:
+                logger.warning("解析收據資料失敗，無法繼續處理")
+                await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
+                return "OK"
             if check_if_receipt_exists(receipt.get("ReceiptID"), user_receipt_path):
                 reply_msg = get_receipt_flex_msg(receipt, items)
                 chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
