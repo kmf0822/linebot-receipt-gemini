@@ -146,10 +146,14 @@ def parse_receipt_json(receipt_json_str: str):
         logger.debug(f"{lines[1:-1] = }")
         if len(lines) < 2:
             raise ValueError("JSON 資料格式不正確，缺少必要的內容")
-        # json_str = '\n'.join(lines[1:-1])
-        json_str = ' '.join(lines[1:-1])
-        logger.debug(f"{json_str = }")
-        receipt_data = json.loads(json_str)
+        try:
+            json_str = '\n'.join(lines[1:-1])
+            logger.debug(f"{json_str = }")
+            receipt_data = json.loads(json_str)
+        except:
+            json_str = ' '.join(lines[1:-1])
+            logger.debug(f"{json_str = }")
+            receipt_data = json.loads(json_str)
         return receipt_data
     except json.JSONDecodeError as e:
         logger.error(f"JSONDecodeError: {e.msg} at line {e.lineno}, column {e.colno}")
