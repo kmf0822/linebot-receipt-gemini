@@ -1,6 +1,7 @@
-from typing import List, Dict
-import requests
 import os
+from typing import List, Dict
+
+import requests
 
 
 class ModelInterface:
@@ -18,21 +19,14 @@ class ModelInterface:
         pass
 
 
-class OpenAIModel(ModelInterface):
+openai_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
 
+
+class OpenAIModel(ModelInterface):
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # self.api_key = "73ba3ef13d7f4d38a66ab055797570e7"
-        # self.base_url = 'https://api.openai.com/v1'
-
-        self.base_url = 'https://openai-workspace-22.openai.azure.com/openai'
-        # self.base_url = 'https://openai-workspace-22.openai.azure.com/openai/deployments/gpt-4-8K'
-        # self.api_type = "azure"
-        # self.api_base = "https://openai-workspace-22.openai.azure.com/"
-        self.api_version = "2024-05-01-preview"
-        # self.api_version = "2023-07-01-preview"
-        # self.api_key = os.getenv("OPENAI_API_KEY")
-        # https://openai-workspace-22.openai.azure.com/openai/deployments/gpt-4-8K/chat/completions?api-version=2023-07-01-preview
+        self.base_url = openai_endpoint or 'https://openai-workspace-22.openai.azure.com/openai'
+        self.api_version = "2025-04-01-preview"
 
     def _request(self, method, endpoint, body=None, files=None):
         # self.headers = {'Authorization': f'Bearer {self.api_key}'}
