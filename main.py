@@ -6,9 +6,7 @@ from io import BytesIO
 
 import PIL.Image
 import aiohttp
-import firebase_admin
 from fastapi import FastAPI, HTTPException, Request
-from firebase_admin import credentials, db
 from linebot import AsyncLineBotApi, WebhookParser
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
 from linebot.exceptions import InvalidSignatureError
@@ -16,13 +14,15 @@ from linebot.models import FlexSendMessage, MessageEvent, TextSendMessage
 
 from models import OpenAIModel
 from src.logger import logger
+from src.sheets_storage import SheetsStorage
 
 # Environment variables
 channel_secret = os.getenv("ChannelSecret")
 channel_access_token = os.getenv("ChannelAccessToken")
 openai_api_key = os.getenv("AZURE_OPENAI_API_KEY")
 openai_model_engine = os.getenv("AZURE_OPENAI_MODEL_ENGINE")
-firebase_url = os.getenv("FIREBASE_URL")
+spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
+credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
 image_prompt = """\
 You are a meticulous travel secretary analyzing either a shopping receipt or a transportation ticket (train or flight).
@@ -84,18 +84,15 @@ for var, val in {
     "ChannelAccessToken": channel_access_token,
     "AZURE_OPENAI_API_KEY": openai_api_key,
     "AZURE_OPENAI_MODEL_ENGINE": openai_model_engine,
-    "FIREBASE_URL": firebase_url,
+    "GOOGLE_SHEETS_SPREADSHEET_ID": spreadsheet_id,
+    "GOOGLE_APPLICATION_CREDENTIALS_JSON": credentials_json,
 }.items():
     if val is None:
         logger.error(f"Specify {var} as environment variable.")
         sys.exit(1)
 
-# Initialize Firebase Admin
-# cred = credentials.ApplicationDefault()
-cred_info = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS_JSON'])
-cred = credentials.Certificate(cred_info)
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
+# Initialize Google Sheets storage
+sheets_storage = SheetsStorage(spreadsheet_id, credentials_json)
 
 # Initialize Line bot
 app = FastAPI()
@@ -106,7 +103,7 @@ parser = WebhookParser(channel_secret)
 
 # Initialize Azure OpenAI client
 openai_client = OpenAIModel(api_key=openai_api_key)
-os.environ["OPENAI_MODEL_ENGINE"] = openai_model_engine
+# os.environ["OPENAI_MODEL_ENGINE"] = openai_model_engine
 
 
 # ================= Azure OpenAI =================
@@ -145,54 +142,45 @@ def generate_json_from_receipt_image(img, prompt: str) -> str:
     return ""
 
 
-# ================= Firebase =================
-def add_receipt(receipt_data: dict, items: list, user_receipt_path: str, user_item_path: str):
-    try:
-        receipt_id = receipt_data.get("ReceiptID")
-        db.reference(user_receipt_path).child(receipt_id).set(receipt_data)
-        for item in items:
-            item_id = item.get("ItemID")
-            db.reference(user_item_path).child(item_id).set(item)
-        logger.info(f"Add ReceiptID: {receipt_id} completed.")
-    except Exception as e:
-        logger.error(f"Error in add_receipt: {e}")
+# ================= Sheets Storage =================
+def add_receipt(user_id: str, receipt_data: dict, items: list):
+	try:
+		receipt_id = receipt_data.get("ReceiptID")
+		sheets_storage.store_receipt(user_id, receipt_data, items)
+		logger.info(f"Add ReceiptID: {receipt_id} completed.")
+	except Exception as e:
+		logger.error(f"Error in add_receipt: {e}")
 
 
-def add_ticket(ticket_data: dict, segments: list, user_ticket_path: str, user_segment_path: str):
-    try:
-        ticket_id = ticket_data.get("TicketID")
-        if not ticket_id:
-            raise ValueError("TicketID 缺失，無法寫入資料庫")
-        db.reference(user_ticket_path).child(ticket_id).set(ticket_data)
-        for idx, segment in enumerate(segments or [], start=1):
-            if not isinstance(segment, dict):
-                continue
-            segment_id = segment.get("SegmentID") or f"{ticket_id}-{str(idx).zfill(2)}"
-            segment["SegmentID"] = segment_id
-            db.reference(user_segment_path).child(segment_id).set(segment)
-        logger.info(f"Add TicketID: {ticket_id} completed.")
-    except Exception as e:
-        logger.error(f"Error in add_ticket: {e}")
+def add_ticket(user_id: str, ticket_data: dict, segments: list):
+	try:
+		ticket_id = ticket_data.get("TicketID")
+		if not ticket_id:
+			raise ValueError("TicketID 缺失，無法寫入資料庫")
+		sheets_storage.store_ticket(user_id, ticket_data, segments)
+		logger.info(f"Add TicketID: {ticket_id} completed.")
+	except Exception as e:
+		logger.error(f"Error in add_ticket: {e}")
 
 
-def check_if_receipt_exists(receipt_id: str, user_receipt_path: str) -> bool:
-    try:
-        receipt = db.reference(user_receipt_path).child(receipt_id).get()
-        return receipt is not None
-    except Exception as e:
-        logger.error(f"Error in check_if_receipt_exists: {e}")
-        return False
+def check_if_receipt_exists(user_id: str, receipt_id: str) -> bool:
+	if not receipt_id:
+		return False
+	try:
+		return sheets_storage.receipt_exists(user_id, receipt_id)
+	except Exception as e:
+		logger.error(f"Error in check_if_receipt_exists: {e}")
+		return False
 
 
-def check_if_ticket_exists(ticket_id: str, user_ticket_path: str) -> bool:
-    if not ticket_id:
-        return False
-    try:
-        ticket = db.reference(user_ticket_path).child(ticket_id).get()
-        return ticket is not None
-    except Exception as e:
-        logger.error(f"Error in check_if_ticket_exists: {e}")
-        return False
+def check_if_ticket_exists(user_id: str, ticket_id: str) -> bool:
+	if not ticket_id:
+		return False
+	try:
+		return sheets_storage.ticket_exists(user_id, ticket_id)
+	except Exception as e:
+		logger.error(f"Error in check_if_ticket_exists: {e}")
+		return False
 
 
 # ================= Data Processing =================
@@ -407,28 +395,23 @@ async def handle_callback(request: Request):
         if not isinstance(event, MessageEvent):
             continue
         user_id = event.source.user_id
-        user_receipt_path = f"receipt_helper/{user_id}/Receipts"
-        user_item_path = f"receipt_helper/{user_id}/Items"
-        user_all_receipts_path = f"receipt_helper/{user_id}"
 
         if event.message.type == "text":
-            user_id = event.source.user_id
             text = event.message.text.strip()
             logger.info(f'{user_id}: [{openai_model_engine}]{text}')
-            all_receipts = db.reference(user_all_receipts_path).get()
+            all_receipts = sheets_storage.get_user_snapshot(user_id)
             reply_msg = TextSendMessage(text="No message to reply with")
-            msg = event.message.text
-            if msg == "!清空":
+            if text == "!清空":
                 reply_msg = TextSendMessage(text="對話歷史紀錄已經清空！")
-                db.reference(user_all_receipts_path).delete()
+                sheets_storage.clear_user_data(user_id)
             else:
                 prompt_msg = (
                     f"Here is my entire receipt list during my travel: {all_receipts}; "
-                    f"please answer my question based on this information. {msg}. Reply in zh_tw."
+                    f"please answer my question based on this information. {text}. Reply in zh_tw."
                 )
                 response_text = generate_aoai_text_complete(prompt_msg)
                 reply_msg = TextSendMessage(text=response_text)
-            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}]' + msg)
+            logger.info(f'{user_id}: [{openai_model_engine}]' + text)
             await line_bot_api.reply_message(event.reply_token, reply_msg)
         elif event.message.type == "image":
             message_content = await line_bot_api.get_message_content(event.message.id)
@@ -441,11 +424,11 @@ async def handle_callback(request: Request):
                 logger.warning("模型沒有回傳任何資料")
                 await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="未取得辨識結果，請稍後再試"))
                 return "OK"
-            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}] Before Translate Result: {result_text}')
+            logger.info(f'{user_id}: [{openai_model_engine}] Before Translate Result: {result_text}')
             tw_result_text = generate_aoai_text_complete(
                 result_text + "\n --- " + json_translate_from_nonchinese_prompt
             )
-            logger.info(f'{user_id}: [{os.getenv("OPENAI_MODEL_ENGINE")}]{tw_result_text} After Translate Result: {tw_result_text}')
+            logger.info(f'{user_id}: [{openai_model_engine}]{tw_result_text} After Translate Result: {tw_result_text}')
             parsed_result = parse_receipt_json(result_text)
             if parsed_result is None:
                 await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="資料解析失敗，請確認影像內容"))
@@ -458,15 +441,13 @@ async def handle_callback(request: Request):
             segments, ticket = extract_ticket_data(parsed_result)
             tw_items, tw_receipt = extract_receipt_data(parsed_tw_result)
             tw_segments, tw_ticket = extract_ticket_data(parsed_tw_result)
-            user_ticket_path = f"receipt_helper/{user_id}/Tickets"
-            user_segment_path = f"receipt_helper/{user_id}/Segments"
             if receipt:
                 if tw_receipt is None:
                     logger.warning("翻譯後收據資料解析失敗")
                     await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
                     return "OK"
                 receipt_id = receipt.get("ReceiptID")
-                if check_if_receipt_exists(receipt_id, user_receipt_path):
+                if check_if_receipt_exists(user_id, receipt_id):
                     reply_msg = get_receipt_flex_msg(receipt, items)
                     chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
                     await line_bot_api.reply_message(
@@ -474,7 +455,7 @@ async def handle_callback(request: Request):
                         [TextSendMessage(text="這個收據已經存在資料庫中。"), reply_msg, chinese_reply_msg],
                     )
                     return "OK"
-                add_receipt(tw_receipt, tw_items, user_receipt_path, user_item_path)
+                add_receipt(user_id, tw_receipt, tw_items)
                 reply_msg = get_receipt_flex_msg(receipt, items)
                 chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
                 await line_bot_api.reply_message(event.reply_token, [reply_msg, chinese_reply_msg])
@@ -489,7 +470,7 @@ async def handle_callback(request: Request):
                     logger.warning("票券缺少 TicketID")
                     await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="票券缺少票號，請重新拍攝或輸入"))
                     return "OK"
-                if check_if_ticket_exists(ticket_id, user_ticket_path):
+                if check_if_ticket_exists(user_id, ticket_id):
                     reply_msg = get_train_ticket_flex_msg(ticket, segments)
                     chinese_reply_msg = get_train_ticket_flex_msg(tw_ticket, tw_segments)
                     await line_bot_api.reply_message(
@@ -497,17 +478,12 @@ async def handle_callback(request: Request):
                         [TextSendMessage(text="這張票券已經存在資料庫中。"), reply_msg, chinese_reply_msg],
                     )
                     return "OK"
-                add_ticket(tw_ticket, tw_segments, user_ticket_path, user_segment_path)
+                add_ticket(user_id, tw_ticket, tw_segments)
                 reply_msg = get_train_ticket_flex_msg(ticket, segments)
                 chinese_reply_msg = get_train_ticket_flex_msg(tw_ticket, tw_segments)
                 await line_bot_api.reply_message(event.reply_token, [reply_msg, chinese_reply_msg])
                 return "OK"
-            logger.warning("無法辨識為收據或票券")
-            await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="無法辨識為收據或票券，請重新拍攝"))
-            return "OK"
-        else:
-            continue
-    return "OK"
+    return None
 
 
 @app.get("/")
