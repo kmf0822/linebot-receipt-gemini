@@ -103,7 +103,6 @@ parser = WebhookParser(channel_secret)
 
 # Initialize Azure OpenAI client
 openai_client = OpenAIModel(api_key=openai_api_key)
-# os.environ["OPENAI_MODEL_ENGINE"] = openai_model_engine
 
 
 # ================= Azure OpenAI =================
@@ -144,43 +143,43 @@ def generate_json_from_receipt_image(img, prompt: str) -> str:
 
 # ================= Sheets Storage =================
 def add_receipt(user_id: str, receipt_data: dict, items: list):
-	try:
-		receipt_id = receipt_data.get("ReceiptID")
-		sheets_storage.store_receipt(user_id, receipt_data, items)
-		logger.info(f"Add ReceiptID: {receipt_id} completed.")
-	except Exception as e:
-		logger.error(f"Error in add_receipt: {e}")
+    try:
+        receipt_id = receipt_data.get("ReceiptID")
+        sheets_storage.store_receipt(user_id, receipt_data, items)
+        logger.info(f"Add ReceiptID: {receipt_id} completed.")
+    except Exception as e:
+        logger.error(f"Error in add_receipt: {e}")
 
 
 def add_ticket(user_id: str, ticket_data: dict, segments: list):
-	try:
-		ticket_id = ticket_data.get("TicketID")
-		if not ticket_id:
-			raise ValueError("TicketID 缺失，無法寫入資料庫")
-		sheets_storage.store_ticket(user_id, ticket_data, segments)
-		logger.info(f"Add TicketID: {ticket_id} completed.")
-	except Exception as e:
-		logger.error(f"Error in add_ticket: {e}")
+    try:
+        ticket_id = ticket_data.get("TicketID")
+        if not ticket_id:
+            raise ValueError("TicketID 缺失，無法寫入資料庫")
+        sheets_storage.store_ticket(user_id, ticket_data, segments)
+        logger.info(f"Add TicketID: {ticket_id} completed.")
+    except Exception as e:
+        logger.error(f"Error in add_ticket: {e}")
 
 
 def check_if_receipt_exists(user_id: str, receipt_id: str) -> bool:
-	if not receipt_id:
-		return False
-	try:
-		return sheets_storage.receipt_exists(user_id, receipt_id)
-	except Exception as e:
-		logger.error(f"Error in check_if_receipt_exists: {e}")
-		return False
+    if not receipt_id:
+        return False
+    try:
+        return sheets_storage.receipt_exists(user_id, receipt_id)
+    except Exception as e:
+        logger.error(f"Error in check_if_receipt_exists: {e}")
+        return False
 
 
 def check_if_ticket_exists(user_id: str, ticket_id: str) -> bool:
-	if not ticket_id:
-		return False
-	try:
-		return sheets_storage.ticket_exists(user_id, ticket_id)
-	except Exception as e:
-		logger.error(f"Error in check_if_ticket_exists: {e}")
-		return False
+    if not ticket_id:
+        return False
+    try:
+        return sheets_storage.ticket_exists(user_id, ticket_id)
+    except Exception as e:
+        logger.error(f"Error in check_if_ticket_exists: {e}")
+        return False
 
 
 # ================= Data Processing =================
