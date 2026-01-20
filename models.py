@@ -31,7 +31,7 @@ class OpenAIModel(ModelInterface):
         self.api_key = api_key
         self.base_url = openai_endpoint or 'https://openai-workspace-22.openai.azure.com/openai'
         self.api_version = "2025-04-01-preview"
-        logger.debug(f"OpenAIModel initialized with base_url: {self.base_url} and api_version: {self.api_version}")
+        logger.debug(f"OpenAIModel initialized with {self.base_url=}\t{self.api_version=}\t{openai_model_engine=}")
 
     def _request(self, method, endpoint, body=None, files=None):
         # self.headers = {'Authorization': f'Bearer {self.api_key}'}
