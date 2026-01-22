@@ -443,7 +443,7 @@ async def handle_callback(request: Request):
             input_image_path = f'{str(uuid.uuid4())}.jpg'
             img.save(input_image_path, format='JPEG')
 
-            logger.info(f'{user_id}: [{openai_model_engine}]{event.message.type} received')
+            logger.info(f'{user_id}: [{openai_model_engine}] {event.message.type} received')
             result_text = generate_json_from_receipt_image(img, image_prompt)
             if not result_text:
                 logger.warning("模型沒有回傳任何資料")
@@ -456,7 +456,7 @@ async def handle_callback(request: Request):
             tw_result_text = generate_aoai_text_complete(
                 result_text + "\n --- " + json_translate_from_nonchinese_prompt
             )
-            logger.info(f'{user_id}: [{openai_model_engine}]{tw_result_text} After Translate Result: {tw_result_text}')
+            logger.info(f'{user_id}: [{openai_model_engine}] After Translate Result: {tw_result_text}')
             parsed_result = parse_receipt_json(result_text)
             if parsed_result is None:
                 await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="資料解析失敗，請確認影像內容"))
