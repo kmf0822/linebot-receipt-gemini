@@ -418,6 +418,7 @@ async def handle_callback(request: Request):
             async for s in message_content.iter_content():
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
+            logger.info(f'{user_id}: [{openai_model_engine}]{event.message.type} received')
             result_text = generate_json_from_receipt_image(img, image_prompt)
             if not result_text:
                 logger.warning("模型沒有回傳任何資料")
@@ -446,18 +447,17 @@ async def handle_callback(request: Request):
                     await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
                     return "OK"
                 receipt_id = receipt.get("ReceiptID")
+                reply_messages = []
                 if check_if_receipt_exists(user_id, receipt_id):
-                    reply_msg = get_receipt_flex_msg(receipt, items)
-                    chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
-                    await line_bot_api.reply_message(
-                        event.reply_token,
-                        [TextSendMessage(text="這個收據已經存在資料庫中。"), reply_msg, chinese_reply_msg],
-                    )
-                    return "OK"
-                add_receipt(user_id, tw_receipt, tw_items)
+                    reply_messages.append(TextSendMessage(text="這個收據已經存在資料庫中。"))
+                else:
+                    add_receipt(user_id, tw_receipt, tw_items)
                 reply_msg = get_receipt_flex_msg(receipt, items)
                 chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
-                await line_bot_api.reply_message(event.reply_token, [reply_msg, chinese_reply_msg])
+                # reply_messages.append(reply_msg)
+                reply_messages.append(chinese_reply_msg)
+                logger.info(f'{user_id}: [{openai_model_engine}]{receipt_id} Receipt processed and reply sent')
+                await line_bot_api.reply_message(event.reply_token, reply_messages)
                 return "OK"
             if ticket:
                 if tw_ticket is None:
@@ -469,18 +469,17 @@ async def handle_callback(request: Request):
                     logger.warning("票券缺少 TicketID")
                     await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="票券缺少票號，請重新拍攝或輸入"))
                     return "OK"
+                reply_messages = []
                 if check_if_ticket_exists(user_id, ticket_id):
-                    reply_msg = get_train_ticket_flex_msg(ticket, segments)
-                    chinese_reply_msg = get_train_ticket_flex_msg(tw_ticket, tw_segments)
-                    await line_bot_api.reply_message(
-                        event.reply_token,
-                        [TextSendMessage(text="這張票券已經存在資料庫中。"), reply_msg, chinese_reply_msg],
-                    )
-                    return "OK"
-                add_ticket(user_id, tw_ticket, tw_segments)
+                    reply_messages.append(TextSendMessage(text="這張票券已經存在資料庫中。"))
+                else:
+                    add_ticket(user_id, tw_ticket, tw_segments)
                 reply_msg = get_train_ticket_flex_msg(ticket, segments)
                 chinese_reply_msg = get_train_ticket_flex_msg(tw_ticket, tw_segments)
-                await line_bot_api.reply_message(event.reply_token, [reply_msg, chinese_reply_msg])
+                # reply_messages.append(reply_msg)
+                reply_messages.append(chinese_reply_msg)
+                logger.info(f'{user_id}: [{openai_model_engine}]{ticket_id} Ticket processed and reply sent')
+                await line_bot_api.reply_message(event.reply_token, reply_messages)
                 return "OK"
     return None
 
