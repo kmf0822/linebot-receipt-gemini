@@ -134,6 +134,7 @@ class SheetsStorage:
             files = results.get('files', [])
 
             if files:
+                logger.debug(f"Found existing folder '{folder_name}' with ID: {files[0].get('id')}")
                 return files[0].get('id')
 
             # Create folder if not exists
@@ -148,6 +149,7 @@ class SheetsStorage:
                 body=file_metadata,
                 fields='id'
             ).execute()
+            logger.debug(f"Created folder '{folder_name}' with ID: {folder.get('id')}")
             return folder.get('id')
         except Exception as e:
             logger.error(f"Error finding or creating folder '{folder_name}': {e}")
