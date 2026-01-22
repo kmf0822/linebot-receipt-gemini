@@ -1,6 +1,6 @@
 fastapi==0.115.11
 # firebase_admin==6.6.0
-aiohttp==3.9.5
+aiohttp==3.10.9
 git+https://github.com/ozgur/python-firebase
 google-generativeai
 gspread==5.12.4
