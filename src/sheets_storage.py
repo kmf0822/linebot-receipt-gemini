@@ -107,19 +107,100 @@ class SheetsStorage:
             self._drive_service = build('drive', 'v3', credentials=self._credentials)
         return self._drive_service
 
-    def upload_image_to_drive(self, file_path: str) -> Optional[str]:
+    def _find_or_create_folder(self, folder_name: str, parent_id: Optional[str] = None) -> Optional[str]:
+        """
+        Find or create a folder in Google Drive.
+
+        Args:
+            folder_name: Name of the folder to find or create.
+            parent_id: Optional parent folder ID.
+
+        Returns:
+            Folder ID, or None if failed.
+        """
+        try:
+            drive_service = self._get_drive_service()
+
+            # Search for existing folder
+            query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            if parent_id:
+                query += f" and '{parent_id}' in parents"
+
+            results = drive_service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name)'
+            ).execute()
+            files = results.get('files', [])
+
+            if files:
+                return files[0].get('id')
+
+            # Create folder if not exists
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            if parent_id:
+                file_metadata['parents'] = [parent_id]
+
+            folder = drive_service.files().create(
+                body=file_metadata,
+                fields='id'
+            ).execute()
+            return folder.get('id')
+        except Exception as e:
+            logger.error(f"Error finding or creating folder '{folder_name}': {e}")
+            return None
+
+    def _get_image_folder_id(self, user_id: str, image_type: str) -> Optional[str]:
+        """
+        Get or create the folder hierarchy for storing images.
+        Structure: ReceiptBot / {user_id} / {image_type}
+
+        Args:
+            user_id: LINE user ID.
+            image_type: Type of image ('receipts' or 'tickets').
+
+        Returns:
+            Folder ID for storing the image, or None if failed.
+        """
+        # Create root folder: ReceiptBot
+        root_folder_id = self._find_or_create_folder('ReceiptBot')
+        if not root_folder_id:
+            return None
+
+        # Create user folder: ReceiptBot / {user_id}
+        user_folder_id = self._find_or_create_folder(user_id, root_folder_id)
+        if not user_folder_id:
+            return None
+
+        # Create image type folder: ReceiptBot / {user_id} / {image_type}
+        image_type_folder_id = self._find_or_create_folder(image_type, user_folder_id)
+        return image_type_folder_id
+
+    def upload_image_to_drive(self, file_path: str, user_id: str, image_type: str) -> Optional[str]:
         """
         Upload image to Google Drive and return the file ID.
 
         Args:
             file_path: Path to the image file to upload.
+            user_id: LINE user ID for folder organization.
+            image_type: Type of image ('receipts' or 'tickets').
 
         Returns:
             File ID of the uploaded image, or None if upload fails.
         """
         try:
             drive_service = self._get_drive_service()
+
+            # Get or create the target folder
+            folder_id = self._get_image_folder_id(user_id, image_type)
+
             file_metadata = {'name': os.path.basename(file_path)}
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+
             media = MediaFileUpload(file_path, mimetype='image/jpeg')
             file = drive_service.files().create(
                 body=file_metadata, media_body=media, fields='id'
@@ -151,19 +232,21 @@ class SheetsStorage:
             logger.error(f"Error getting shareable link: {e}")
             return None
 
-    def upload_and_get_image_url(self, file_path: str) -> Optional[str]:
+    def upload_and_get_image_url(self, file_path: str, user_id: str, image_type: str) -> Optional[str]:
         """
         Upload image to Google Drive and return the shareable URL.
 
         Args:
             file_path: Path to the image file to upload.
+            user_id: LINE user ID for folder organization.
+            image_type: Type of image ('receipts' or 'tickets').
 
         Returns:
             Shareable URL of the uploaded image, or None if failed.
         """
         if not file_path or not os.path.exists(file_path):
             return None
-        file_id = self.upload_image_to_drive(file_path)
+        file_id = self.upload_image_to_drive(file_path, user_id, image_type)
         if not file_id:
             return None
         return self.get_shareable_link(file_id)
@@ -199,7 +282,7 @@ class SheetsStorage:
         # Upload image and get shareable URL if image_path is provided
         image_formula = ""
         if image_path:
-            image_url = self.upload_and_get_image_url(image_path)
+            image_url = self.upload_and_get_image_url(image_path, user_id, 'receipts')
             if image_url:
                 image_formula = self.get_image_formula(image_url)
 
@@ -232,7 +315,7 @@ class SheetsStorage:
         # Upload image and get shareable URL if image_path is provided
         image_formula = ""
         if image_path:
-            image_url = self.upload_and_get_image_url(image_path)
+            image_url = self.upload_and_get_image_url(image_path, user_id, 'tickets')
             if image_url:
                 image_formula = self.get_image_formula(image_url)
 
