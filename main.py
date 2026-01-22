@@ -80,9 +80,10 @@ Rules:
 """
 
 json_translate_from_nonchinese_prompt = """\
-This is a JSON representation of a receipt or travel ticket.
-Translate every non-Chinese value into zh_tw, using the format Chinese(non-Chinese).
-Return only the translated JSON while keeping the original structure and keys.
+This is a JSON representation of a receipt or travel ticket. 
+Translate every non-Chinese value into zh_tw, using the format Chinese(non-Chinese). 
+However, for amounts, prices,route numbers, times, dates, and other numerical or universally formatted values, keep them in their original format without translation. 
+Return only the translated JSON while keeping the original structure and keys. 
 """
 
 # Validate required environment variables
