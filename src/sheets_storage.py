@@ -192,7 +192,7 @@ class SheetsStorage:
             File ID of the uploaded image, or None if upload fails.
         """
         try:
-            logger.debug(f"{file_path=}")
+            logger.debug(f"[{image_type=}] {file_path=}")
             drive_service = self._get_drive_service()
 
             # Get or create the target folder
@@ -247,6 +247,7 @@ class SheetsStorage:
         """
         if not file_path or not os.path.exists(file_path):
             return None
+        logger.debug(f"[{image_type=}] {file_path=}")
         file_id = self.upload_image_to_drive(file_path, user_id, image_type)
         if not file_id:
             return None
