@@ -79,9 +79,10 @@ Rules:
 - Always include the arrays even if empty.
 """
 
+# Translate every non-Chinese value into zh_tw, using the format Chinese(non-Chinese).
 json_translate_from_nonchinese_prompt = """\
 This is a JSON representation of a receipt or travel ticket. 
-Translate every non-Chinese value into zh_tw, using the format Chinese(non-Chinese). 
+Translate every non-Chinese value into zh_tw, using the format Chinese. 
 However, for amounts, prices,route numbers, times, dates, and other numerical or universally formatted values, keep them in their original format without translation. 
 Return only the translated JSON while keeping the original structure and keys. 
 """
@@ -494,7 +495,7 @@ async def handle_callback(request: Request):
                 chinese_reply_msg = get_receipt_flex_msg(tw_receipt, tw_items)
                 # reply_messages.append(reply_msg)
                 reply_messages.append(chinese_reply_msg)
-                logger.info(f'{user_id}: [{openai_model_engine}]{receipt_id} Receipt processed and reply sent')
+                logger.info(f'{user_id}: [{openai_model_engine}] {receipt_id} Receipt processed and reply sent')
                 await line_bot_api.reply_message(event.reply_token, reply_messages)
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
