@@ -6,18 +6,22 @@ import uuid
 from io import BytesIO
 
 import PIL.Image
-import aiohttp
 from fastapi import FastAPI, HTTPException, Request
-from linebot import AsyncLineBotApi, WebhookParser
-from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import FlexSendMessage, MessageEvent, TextSendMessage
+from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     ApiClient,
+    AsyncApiClient,
+    AsyncMessagingApi,
+    AsyncMessagingApiBlob,
     Configuration,
+    FlexMessage,
     MessagingApi,
+    ReplyMessageRequest,
     ShowLoadingAnimationRequest,
+    TextMessage,
 )
+from linebot.v3.webhook import WebhookParser
+from linebot.v3.webhooks import MessageEvent
 
 from models import OpenAIModel
 from src.logger import logger
@@ -105,15 +109,17 @@ sheets_storage = SheetsStorage(spreadsheet_id, credentials_json)
 
 # Initialize Line bot
 app = FastAPI()
-session = aiohttp.ClientSession()
-async_http_client = AiohttpAsyncHttpClient(session)
-line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
 
-# Initialize v3 MessagingApi for show_loading_animation
+# Initialize v3 MessagingApi for show_loading_animation (sync)
 configuration = Configuration(access_token=channel_access_token)
 api_client = ApiClient(configuration)
 line_bot_api_v3 = MessagingApi(api_client)
+
+# Initialize async API for async operations
+async_api_client = AsyncApiClient(configuration)
+async_line_bot_api = AsyncMessagingApi(async_api_client)
+async_blob_api = AsyncMessagingApiBlob(async_api_client)
 
 # Initialize Azure OpenAI client
 openai_client = OpenAIModel(api_key=openai_api_key)
@@ -251,7 +257,7 @@ def extract_ticket_data(receipt_json_obj: dict):
 
 
 # ================= Flex Message =================
-def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexSendMessage:
+def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexMessage:
     items_contents = [
         {
             "type": "box",
@@ -289,10 +295,10 @@ def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexSendMessage:
         },
         "styles": {"footer": {"separator": True}},
     }
-    return FlexSendMessage(alt_text="Receipt Data", contents=flex_msg)
+    return FlexMessage(altText="Receipt Data", contents=flex_msg)
 
 
-def get_train_ticket_flex_msg(ticket_data: dict, items: list) -> FlexSendMessage:
+def get_train_ticket_flex_msg(ticket_data: dict, items: list) -> FlexMessage:
     segment_contents = [
         {
             "type": "box",
@@ -391,7 +397,7 @@ def get_train_ticket_flex_msg(ticket_data: dict, items: list) -> FlexSendMessage
         },
         "styles": {"footer": {"separator": True}},
     }
-    return FlexSendMessage(alt_text="Ticket Detail", contents=flex_msg)
+    return FlexMessage(altText="Ticket Detail", contents=flex_msg)
 
 
 # ================= Main Flow =================
@@ -421,9 +427,9 @@ async def handle_callback(request: Request):
             text = event.message.text.strip()
             logger.info(f'{user_id}: [{openai_model_engine}]{text}')
             all_receipts = sheets_storage.get_user_snapshot(user_id)
-            reply_msg = TextSendMessage(text="No message to reply with")
+            reply_msg = TextMessage(text="No message to reply with")
             if text == "!清空":
-                reply_msg = TextSendMessage(text="對話歷史紀錄已經清空！")
+                reply_msg = TextMessage(text="對話歷史紀錄已經清空！")
                 sheets_storage.clear_user_data(user_id)
             else:
                 prompt_msg = (
@@ -431,15 +437,12 @@ async def handle_callback(request: Request):
                     f"please answer my question based on this information. {text}. Reply in zh_tw."
                 )
                 response_text = generate_aoai_text_complete(prompt_msg)
-                reply_msg = TextSendMessage(text=response_text)
+                reply_msg = TextMessage(text=response_text)
             logger.info(f'{user_id}: [{openai_model_engine}]' + text)
-            await line_bot_api.reply_message(event.reply_token, reply_msg)
+            await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[reply_msg]))
         elif event.message.type == "image":
-            message_content = await line_bot_api.get_message_content(event.message.id)
-            image_content = b""
-            async for s in message_content.iter_content():
-                image_content += s
-            img = PIL.Image.open(BytesIO(image_content))
+            message_content = await async_blob_api.get_message_content(event.message.id)
+            img = PIL.Image.open(BytesIO(message_content))
 
             # Save image to local file for uploading to Google Drive
             input_image_path = f'{str(uuid.uuid4())}.jpg'
@@ -449,7 +452,7 @@ async def handle_callback(request: Request):
             result_text = generate_json_from_receipt_image(img, image_prompt)
             if not result_text:
                 logger.warning("模型沒有回傳任何資料")
-                await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="未取得辨識結果，請稍後再試"))
+                await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="未取得辨識結果，請稍後再試")]))
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
@@ -461,14 +464,14 @@ async def handle_callback(request: Request):
             logger.info(f'{user_id}: [{openai_model_engine}] After Translate Result: {tw_result_text}')
             parsed_result = parse_receipt_json(result_text)
             if parsed_result is None:
-                await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="資料解析失敗，請確認影像內容"))
+                await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="資料解析失敗，請確認影像內容")]))
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
                 return "OK"
             parsed_tw_result = parse_receipt_json(tw_result_text)
             if parsed_tw_result is None:
-                await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="翻譯後資料解析失敗，請稍後再試"))
+                await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="翻譯後資料解析失敗，請稍後再試")]))
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
@@ -480,7 +483,7 @@ async def handle_callback(request: Request):
             if receipt:
                 if tw_receipt is None:
                     logger.warning("翻譯後收據資料解析失敗")
-                    await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="收據資料解析失敗，請檢查圖片或資料格式"))
+                    await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="收據資料解析失敗，請檢查圖片或資料格式")]))
                     # Clean up temp image file
                     if os.path.exists(input_image_path):
                         os.remove(input_image_path)
@@ -488,7 +491,7 @@ async def handle_callback(request: Request):
                 receipt_id = receipt.get("ReceiptID")
                 reply_messages = []
                 if check_if_receipt_exists(user_id, receipt_id):
-                    reply_messages.append(TextSendMessage(text="這個收據已經存在資料庫中。"))
+                    reply_messages.append(TextMessage(text="這個收據已經存在資料庫中。"))
                 else:
                     add_receipt(user_id, tw_receipt, tw_items, image_path=input_image_path)
                 reply_msg = get_receipt_flex_msg(receipt, items)
@@ -496,7 +499,7 @@ async def handle_callback(request: Request):
                 # reply_messages.append(reply_msg)
                 reply_messages.append(chinese_reply_msg)
                 logger.info(f'{user_id}: [{openai_model_engine}] {receipt_id} Receipt processed and reply sent')
-                await line_bot_api.reply_message(event.reply_token, reply_messages)
+                await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=reply_messages))
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
@@ -504,7 +507,7 @@ async def handle_callback(request: Request):
             if ticket:
                 if tw_ticket is None:
                     logger.warning("翻譯後票券資料解析失敗")
-                    await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="票券資料解析失敗，請檢查圖片或資料格式"))
+                    await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="票券資料解析失敗，請檢查圖片或資料格式")]))
                     # Clean up temp image file
                     if os.path.exists(input_image_path):
                         os.remove(input_image_path)
@@ -512,14 +515,14 @@ async def handle_callback(request: Request):
                 ticket_id = ticket.get("TicketID")
                 if not ticket_id:
                     logger.warning("票券缺少 TicketID")
-                    await line_bot_api.reply_message(event.reply_token, TextSendMessage(text="票券缺少票號，請重新拍攝或輸入"))
+                    await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[TextMessage(text="票券缺少票號，請重新拍攝或輸入")]))
                     # Clean up temp image file
                     if os.path.exists(input_image_path):
                         os.remove(input_image_path)
                     return "OK"
                 reply_messages = []
                 if check_if_ticket_exists(user_id, ticket_id):
-                    reply_messages.append(TextSendMessage(text="這張票券已經存在資料庫中。"))
+                    reply_messages.append(TextMessage(text="這張票券已經存在資料庫中。"))
                 else:
                     add_ticket(user_id, tw_ticket, tw_segments, image_path=input_image_path)
                 reply_msg = get_train_ticket_flex_msg(ticket, segments)
@@ -527,7 +530,7 @@ async def handle_callback(request: Request):
                 # reply_messages.append(reply_msg)
                 reply_messages.append(chinese_reply_msg)
                 logger.info(f'{user_id}: [{openai_model_engine}]{ticket_id} Ticket processed and reply sent')
-                await line_bot_api.reply_message(event.reply_token, reply_messages)
+                await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=reply_messages))
                 # Clean up temp image file
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
