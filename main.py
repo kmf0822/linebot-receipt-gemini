@@ -90,6 +90,7 @@ This is a JSON representation of a receipt or travel ticket.
 Translate every non-Chinese value into zh_tw, using the format Chinese. 
 However, for amounts, prices, route numbers, times, dates, and other numerical or universally formatted values, keep them in their original format without translation. 
 For station names, airport names, and other location names in tickets, use the format Chinese(non-Chinese), e.g., "東京(Tokyo)", "台北車站(Taipei Station)". 
+For train or flight route numbers (CarrierName, RouteNumber), if they contain non-Chinese characters, use the format Chinese(non-Chinese), e.g., "新幹線(Shinkansen)", "希望號(Nozomi)".
 Return only the translated JSON while keeping the original structure and keys. 
 """
 
