@@ -1,11 +1,14 @@
 import json
+import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import gspread
 from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 from src.logger import logger
 
@@ -21,6 +24,7 @@ _RECEIPT_COLUMNS = [
     "PurchaseAddress",
     "TotalAmount",
     "ItemsJSON",
+    "ImageURL",
     "CreatedAt",
 ]
 _TICKET_COLUMNS = [
@@ -36,6 +40,7 @@ _TICKET_COLUMNS = [
     "PassengerName",
     "TotalAmount",
     "SegmentsJSON",
+    "ImageURL",
     "CreatedAt",
 ]
 
@@ -50,7 +55,9 @@ class SheetsStorage:
         if not spreadsheet_id:
             raise ValueError("spreadsheet_id is required")
         self.spreadsheet_id = spreadsheet_id
-        self.client = gspread.authorize(self._build_credentials(credentials_json))
+        self._credentials = self._build_credentials(credentials_json)
+        self.client = gspread.authorize(self._credentials)
+        self._drive_service = None
         try:
             self.spreadsheet = self.client.open_by_key(spreadsheet_id)
         except SpreadsheetNotFound as exc:
@@ -94,9 +101,108 @@ class SheetsStorage:
     def _dumps(data: Any) -> str:
         return json.dumps(data or [], ensure_ascii=False)
 
-    def store_receipt(self, user_id: str, receipt_data: Dict[str, Any], items: List[Dict[str, Any]]):
+    def _get_drive_service(self):
+        """Initialize and return Google Drive API service."""
+        if self._drive_service is None:
+            self._drive_service = build('drive', 'v3', credentials=self._credentials)
+        return self._drive_service
+
+    def upload_image_to_drive(self, file_path: str) -> Optional[str]:
+        """
+        Upload image to Google Drive and return the file ID.
+
+        Args:
+            file_path: Path to the image file to upload.
+
+        Returns:
+            File ID of the uploaded image, or None if upload fails.
+        """
+        try:
+            drive_service = self._get_drive_service()
+            file_metadata = {'name': os.path.basename(file_path)}
+            media = MediaFileUpload(file_path, mimetype='image/jpeg')
+            file = drive_service.files().create(
+                body=file_metadata, media_body=media, fields='id'
+            ).execute()
+            return file.get('id')
+        except Exception as e:
+            logger.error(f"Error uploading image to Google Drive: {e}")
+            return None
+
+    def get_shareable_link(self, file_id: str) -> Optional[str]:
+        """
+        Get shareable link for a Google Drive file.
+
+        Args:
+            file_id: The Google Drive file ID.
+
+        Returns:
+            Shareable URL of the file, or None if failed.
+        """
+        try:
+            drive_service = self._get_drive_service()
+            drive_service.permissions().create(
+                fileId=file_id,
+                body={'type': 'anyone', 'role': 'reader'}
+            ).execute()
+            file = drive_service.files().get(fileId=file_id, fields='webViewLink').execute()
+            return file.get('webViewLink')
+        except Exception as e:
+            logger.error(f"Error getting shareable link: {e}")
+            return None
+
+    def upload_and_get_image_url(self, file_path: str) -> Optional[str]:
+        """
+        Upload image to Google Drive and return the shareable URL.
+
+        Args:
+            file_path: Path to the image file to upload.
+
+        Returns:
+            Shareable URL of the uploaded image, or None if failed.
+        """
+        if not file_path or not os.path.exists(file_path):
+            return None
+        file_id = self.upload_image_to_drive(file_path)
+        if not file_id:
+            return None
+        return self.get_shareable_link(file_id)
+
+    @staticmethod
+    def get_image_formula(image_url: str) -> str:
+        """
+        Generate Google Sheets IMAGE formula for displaying image in cell.
+
+        Args:
+            image_url: URL of the image.
+
+        Returns:
+            IMAGE formula string for Google Sheets.
+        """
+        if not image_url:
+            return ""
+        return f'=IMAGE("{image_url}")'
+
+    def store_receipt(self, user_id: str, receipt_data: Dict[str, Any], items: List[Dict[str, Any]], image_path: Optional[str] = None):
+        """
+        Store receipt data to Google Sheets.
+
+        Args:
+            user_id: LINE user ID.
+            receipt_data: Receipt information dictionary.
+            items: List of receipt items.
+            image_path: Optional path to the receipt image file.
+        """
         if not receipt_data:
             raise ValueError("receipt_data is required")
+
+        # Upload image and get shareable URL if image_path is provided
+        image_formula = ""
+        if image_path:
+            image_url = self.upload_and_get_image_url(image_path)
+            if image_url:
+                image_formula = self.get_image_formula(image_url)
+
         row = [
             user_id,
             receipt_data.get("ReceiptID", ""),
@@ -105,13 +211,31 @@ class SheetsStorage:
             receipt_data.get("PurchaseAddress", ""),
             receipt_data.get("TotalAmount", ""),
             self._dumps(items),
+            image_formula,
             self._now(),
         ]
-        self.receipts_ws.append_row(row, value_input_option="RAW")
+        self.receipts_ws.append_row(row, value_input_option="USER_ENTERED")
 
-    def store_ticket(self, user_id: str, ticket_data: Dict[str, Any], segments: List[Dict[str, Any]]):
+    def store_ticket(self, user_id: str, ticket_data: Dict[str, Any], segments: List[Dict[str, Any]], image_path: Optional[str] = None):
+        """
+        Store ticket data to Google Sheets.
+
+        Args:
+            user_id: LINE user ID.
+            ticket_data: Ticket information dictionary.
+            segments: List of ticket segments.
+            image_path: Optional path to the ticket image file.
+        """
         if not ticket_data:
             raise ValueError("ticket_data is required")
+
+        # Upload image and get shareable URL if image_path is provided
+        image_formula = ""
+        if image_path:
+            image_url = self.upload_and_get_image_url(image_path)
+            if image_url:
+                image_formula = self.get_image_formula(image_url)
+
         row = [
             user_id,
             ticket_data.get("TicketID", ""),
@@ -125,9 +249,10 @@ class SheetsStorage:
             ticket_data.get("PassengerName", ""),
             ticket_data.get("TotalAmount", ""),
             self._dumps(segments),
+            image_formula,
             self._now(),
         ]
-        self.tickets_ws.append_row(row, value_input_option="RAW")
+        self.tickets_ws.append_row(row, value_input_option="USER_ENTERED")
 
     def receipt_exists(self, user_id: str, receipt_id: str) -> bool:
         if not receipt_id:
