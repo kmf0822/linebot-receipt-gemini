@@ -71,3 +71,5 @@ except:
     console_handler = ConsoleHandler()
     logger = LoggerFactory.create_logger(formatter,
                                          [file_handler, console_handler])
+
+    logger.warning("Using custom logger as loguru is not available.")
