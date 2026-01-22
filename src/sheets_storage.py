@@ -196,10 +196,10 @@ class SheetsStorage:
 
             # Get or create the target folder
             folder_id = self._get_image_folder_id(user_id, image_type)
-
             file_metadata = {'name': os.path.basename(file_path)}
             if folder_id:
                 file_metadata['parents'] = [folder_id]
+            logger.debug(f"{file_metadata=}")
 
             media = MediaFileUpload(file_path, mimetype='image/jpeg')
             file = drive_service.files().create(
