@@ -186,7 +186,7 @@ def check_if_ticket_exists(user_id: str, ticket_id: str) -> bool:
 # ================= Data Processing =================
 def parse_receipt_json(receipt_json_str: str):
     try:
-        logger.debug(f"{receipt_json_str = }")
+        # logger.debug(f"{receipt_json_str = }")
         json_str = receipt_json_str.strip()
         if json_str.startswith("```"):
             first_newline = json_str.find('\n')
