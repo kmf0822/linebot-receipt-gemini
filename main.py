@@ -87,7 +87,8 @@ Rules:
 json_translate_from_nonchinese_prompt = """\
 This is a JSON representation of a receipt or travel ticket. 
 Translate every non-Chinese value into zh_tw, using the format Chinese. 
-However, for amounts, prices,route numbers, times, dates, and other numerical or universally formatted values, keep them in their original format without translation. 
+However, for amounts, prices, route numbers, times, dates, and other numerical or universally formatted values, keep them in their original format without translation. 
+For station names, airport names, and other location names in tickets, use the format Chinese(non-Chinese), e.g., "東京(Tokyo)", "台北車站(Taipei Station)". 
 Return only the translated JSON while keeping the original structure and keys. 
 """
 
@@ -276,7 +277,7 @@ def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexMessage:
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": "收據OCR明細", "weight": "bold", "color": "#1DB446", "size": "sm"},
+                {"type": "text", "text": "收據明細", "weight": "bold", "color": "#1DB446", "size": "sm"},
                 {"type": "text", "text": f"{receipt_data.get('PurchaseStore')}", "weight": "bold", "size": "xxl", "margin": "md"},
                 {"type": "text", "text": f"{receipt_data.get('PurchaseAddress')}", "size": "xs", "color": "#aaaaaa", "wrap": True},
                 {"type": "separator", "margin": "xxl"},
