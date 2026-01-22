@@ -16,6 +16,16 @@ _SCOPES = (
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 )
+
+# Root folder ID for storing images in personal Google Drive
+# To use this:
+# 1. Create a folder in your personal Google Drive
+# 2. Share that folder with the service account and give it "Editor" access
+# 3. Copy the folder ID from the URL (the long string after /folders/)
+# 4. Set this environment variable: GOOGLE_DRIVE_ROOT_FOLDER_ID=<your_folder_id>
+GOOGLE_DRIVE_ROOT_FOLDER_ID = os.getenv('GOOGLE_DRIVE_ROOT_FOLDER_ID')
+if GOOGLE_DRIVE_ROOT_FOLDER_ID:
+    logger.debug(f"Using personal Google Drive root folder ID: {GOOGLE_DRIVE_ROOT_FOLDER_ID}")
 _RECEIPT_COLUMNS = [
     "UserID",
     "ReceiptID",
@@ -158,7 +168,10 @@ class SheetsStorage:
     def _get_image_folder_id(self, user_id: str, image_type: str) -> Optional[str]:
         """
         Get or create the folder hierarchy for storing images.
-        Structure: ReceiptBot / {user_id} / {image_type}
+        Structure: {root_folder} / ReceiptBot / {user_id} / {image_type}
+
+        If GOOGLE_DRIVE_ROOT_FOLDER_ID is set, the root_folder will be the shared folder
+        in personal Google Drive. Otherwise, files will be stored in the service account's Drive.
 
         Args:
             user_id: LINE user ID.
@@ -167,8 +180,11 @@ class SheetsStorage:
         Returns:
             Folder ID for storing the image, or None if failed.
         """
-        # Create root folder: ReceiptBot
-        root_folder_id = self._find_or_create_folder('ReceiptBot')
+        # Use personal Google Drive folder if configured, otherwise use service account's Drive
+        parent_folder_id = GOOGLE_DRIVE_ROOT_FOLDER_ID
+
+        # Create root folder: ReceiptBot (inside personal folder if configured)
+        root_folder_id = self._find_or_create_folder('ReceiptBot', parent_folder_id)
         if not root_folder_id:
             return None
 
