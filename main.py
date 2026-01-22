@@ -12,6 +12,9 @@ from linebot import AsyncLineBotApi, WebhookParser
 from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import FlexSendMessage, MessageEvent, TextSendMessage
+from linebot.v3.messaging import (
+    ShowLoadingAnimationRequest,
+)
 
 from models import OpenAIModel
 from src.logger import logger
@@ -395,6 +398,14 @@ async def handle_callback(request: Request):
         if not isinstance(event, MessageEvent):
             continue
         user_id = event.source.user_id
+        try:
+            # Show loading animation
+            show_loading_animation_request = ShowLoadingAnimationRequest(chatId=user_id)
+            # show_loading_animation_request = ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=5)
+            api_response = line_bot_api.show_loading_animation(show_loading_animation_request)
+            # logger.debug(f"{api_response = }")
+        except Exception as e:
+            logger.warning(f"Exception when calling MessagingApi->show_loading_animation: {e}")
 
         if event.message.type == "text":
             text = event.message.text.strip()
@@ -433,7 +444,7 @@ async def handle_callback(request: Request):
                 if os.path.exists(input_image_path):
                     os.remove(input_image_path)
                 return "OK"
-            logger.info(f'{user_id}: [{openai_model_engine}] Before Translate Result: {result_text}')
+            # logger.info(f'{user_id}: [{openai_model_engine}] Before Translate Result: {result_text}')
             tw_result_text = generate_aoai_text_complete(
                 result_text + "\n --- " + json_translate_from_nonchinese_prompt
             )
