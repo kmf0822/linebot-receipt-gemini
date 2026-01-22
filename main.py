@@ -14,6 +14,7 @@ from linebot.v3.messaging import (
     AsyncMessagingApi,
     AsyncMessagingApiBlob,
     Configuration,
+    FlexContainer,
     FlexMessage,
     MessagingApi,
     ReplyMessageRequest,
@@ -296,7 +297,7 @@ def get_receipt_flex_msg(receipt_data: dict, items: list) -> FlexMessage:
         },
         "styles": {"footer": {"separator": True}},
     }
-    return FlexMessage(altText="Receipt Data", contents=flex_msg)
+    return FlexMessage(altText="Receipt Data", contents=FlexContainer.from_dict(flex_msg))
 
 
 def get_train_ticket_flex_msg(ticket_data: dict, items: list) -> FlexMessage:
@@ -398,7 +399,7 @@ def get_train_ticket_flex_msg(ticket_data: dict, items: list) -> FlexMessage:
         },
         "styles": {"footer": {"separator": True}},
     }
-    return FlexMessage(altText="Ticket Detail", contents=flex_msg)
+    return FlexMessage(altText="Ticket Detail", contents=FlexContainer.from_dict(flex_msg))
 
 
 # ================= Main Flow =================
