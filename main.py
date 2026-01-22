@@ -13,6 +13,9 @@ from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import FlexSendMessage, MessageEvent, TextSendMessage
 from linebot.v3.messaging import (
+    ApiClient,
+    Configuration,
+    MessagingApi,
     ShowLoadingAnimationRequest,
 )
 
@@ -78,7 +81,7 @@ Rules:
 
 json_translate_from_nonchinese_prompt = """\
 This is a JSON representation of a receipt or travel ticket.
-Translate every non-Chinese value into zh_tw, using the format non-Chinese(Chinese).
+Translate every non-Chinese value into zh_tw, using the format Chinese(non-Chinese).
 Return only the translated JSON while keeping the original structure and keys.
 """
 
@@ -104,6 +107,11 @@ session = aiohttp.ClientSession()
 async_http_client = AiohttpAsyncHttpClient(session)
 line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
 parser = WebhookParser(channel_secret)
+
+# Initialize v3 MessagingApi for show_loading_animation
+configuration = Configuration(access_token=channel_access_token)
+api_client = ApiClient(configuration)
+line_bot_api_v3 = MessagingApi(api_client)
 
 # Initialize Azure OpenAI client
 openai_client = OpenAIModel(api_key=openai_api_key)
@@ -402,7 +410,7 @@ async def handle_callback(request: Request):
             # Show loading animation
             show_loading_animation_request = ShowLoadingAnimationRequest(chatId=user_id)
             # show_loading_animation_request = ShowLoadingAnimationRequest(chatId=user_id, loadingSeconds=5)
-            api_response = line_bot_api.show_loading_animation(show_loading_animation_request)
+            api_response = line_bot_api_v3.show_loading_animation(show_loading_animation_request)
             # logger.debug(f"{api_response = }")
         except Exception as e:
             logger.warning(f"Exception when calling MessagingApi->show_loading_animation: {e}")
