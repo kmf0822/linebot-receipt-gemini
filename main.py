@@ -25,7 +25,7 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhook import WebhookParser
-from linebot.v3.webhooks import MessageEvent
+from linebot.v3.webhooks import MessageEvent, FollowEvent
 
 from models import OpenAIModel
 from src.logger import logger
@@ -696,6 +696,36 @@ def get_attraction_flex_msg(attraction_data: dict) -> FlexMessage:
     return FlexMessage(altText="Attraction Ticket", contents=FlexContainer.from_dict(flex_msg))
 
 
+# ================= Welcome Message =================
+def get_welcome_message() -> str:
+    """Generate welcome message for new users."""
+    return """🎌 歡迎使用日本旅遊記帳小幫手！
+
+這是一個專為日本自助旅行設計的 LINE Bot，幫助您輕鬆記錄旅途中的所有消費。
+
+📸 【拍照記錄】
+直接拍照上傳以下文件：
+• 🛒 購物收據 - 藥妝店、便利商店、百貨
+• 🍜 餐廳收據 - 拉麵、居酒屋、餐廳
+• 🚄 交通票券 - 新幹線、JR、地鐵、巴士
+• 🏨 住宿確認單 - 飯店、旅館預約
+• 🎫 景點門票 - 迪士尼、美術館、溫泉
+
+💬 【快速指令】
+• !統計 - 查看旅費總計
+• !行程 - 查看交通行程
+• !住宿 - 查看住宿清單
+• !景點 - 查看景點紀錄
+• !幫助 - 顯示使用說明
+
+🤖 【智慧問答】
+直接輸入問題，例如：
+「今天花了多少錢？」
+「最貴的消費是什麼？」
+
+祝您日本之旅愉快！🗾✈️"""
+
+
 # ================= Main Flow =================
 @app.post("/callback")
 async def handle_callback(request: Request):
@@ -707,6 +737,14 @@ async def handle_callback(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     for event in events:
+        # Handle new user follow event
+        if isinstance(event, FollowEvent):
+            user_id = event.source.user_id
+            logger.info(f'New user followed: {user_id}')
+            welcome_msg = TextMessage(text=get_welcome_message(), quickReply=get_quick_reply_buttons())
+            await async_line_bot_api.reply_message(ReplyMessageRequest(replyToken=event.reply_token, messages=[welcome_msg]))
+            continue
+
         if not isinstance(event, MessageEvent):
             continue
         user_id = event.source.user_id
