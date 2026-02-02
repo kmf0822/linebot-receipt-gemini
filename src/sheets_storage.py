@@ -48,8 +48,38 @@ _TICKET_COLUMNS = [
     "DepartureTime",
     "ArrivalTime",
     "PassengerName",
+    "SeatClass",
     "TotalAmount",
     "SegmentsJSON",
+    "ImageURL",
+    "CreatedAt",
+]
+_HOTEL_COLUMNS = [
+    "UserID",
+    "HotelID",
+    "HotelName",
+    "HotelAddress",
+    "CheckInDate",
+    "CheckOutDate",
+    "Nights",
+    "RoomType",
+    "GuestName",
+    "TotalAmount",
+    "ConfirmationNumber",
+    "RoomDetailsJSON",
+    "ImageURL",
+    "CreatedAt",
+]
+_ATTRACTION_COLUMNS = [
+    "UserID",
+    "AttractionID",
+    "AttractionName",
+    "AttractionAddress",
+    "VisitDate",
+    "VisitTime",
+    "TicketType",
+    "Quantity",
+    "TotalAmount",
     "ImageURL",
     "CreatedAt",
 ]
@@ -60,6 +90,8 @@ class SheetsStorage:
 
     RECEIPTS_SHEET = "Receipts"
     TICKETS_SHEET = "Tickets"
+    HOTELS_SHEET = "Hotels"
+    ATTRACTIONS_SHEET = "Attractions"
 
     def __init__(self, spreadsheet_id: str, credentials_json: str):
         if not spreadsheet_id:
@@ -75,6 +107,8 @@ class SheetsStorage:
             raise
         self.receipts_ws = self._ensure_worksheet(self.RECEIPTS_SHEET, _RECEIPT_COLUMNS)
         self.tickets_ws = self._ensure_worksheet(self.TICKETS_SHEET, _TICKET_COLUMNS)
+        self.hotels_ws = self._ensure_worksheet(self.HOTELS_SHEET, _HOTEL_COLUMNS)
+        self.attractions_ws = self._ensure_worksheet(self.ATTRACTIONS_SHEET, _ATTRACTION_COLUMNS)
 
     @staticmethod
     def _build_credentials(credentials_json: str) -> Credentials:
@@ -350,12 +384,85 @@ class SheetsStorage:
             ticket_data.get("DepartureTime", ""),
             ticket_data.get("ArrivalTime", ""),
             ticket_data.get("PassengerName", ""),
+            ticket_data.get("SeatClass", ""),
             ticket_data.get("TotalAmount", ""),
             self._dumps(segments),
             image_formula,
             self._now(),
         ]
         self.tickets_ws.append_row(row, value_input_option="USER_ENTERED")
+
+    def store_hotel(self, user_id: str, hotel_data: Dict[str, Any], room_details: List[Dict[str, Any]], image_path: Optional[str] = None):
+        """
+        Store hotel booking data to Google Sheets.
+
+        Args:
+            user_id: LINE user ID.
+            hotel_data: Hotel information dictionary.
+            room_details: List of room details.
+            image_path: Optional path to the hotel booking image file.
+        """
+        if not hotel_data:
+            raise ValueError("hotel_data is required")
+
+        # Upload image and get shareable URL if image_path is provided
+        image_formula = ""
+        if image_path:
+            image_url = self.upload_and_get_image_url(image_path, user_id, 'hotels')
+            if image_url:
+                image_formula = self.get_image_formula(image_url)
+
+        row = [
+            user_id,
+            hotel_data.get("HotelID", ""),
+            hotel_data.get("HotelName", ""),
+            hotel_data.get("HotelAddress", ""),
+            hotel_data.get("CheckInDate", ""),
+            hotel_data.get("CheckOutDate", ""),
+            hotel_data.get("Nights", ""),
+            hotel_data.get("RoomType", ""),
+            hotel_data.get("GuestName", ""),
+            hotel_data.get("TotalAmount", ""),
+            hotel_data.get("ConfirmationNumber", ""),
+            self._dumps(room_details),
+            image_formula,
+            self._now(),
+        ]
+        self.hotels_ws.append_row(row, value_input_option="USER_ENTERED")
+
+    def store_attraction(self, user_id: str, attraction_data: Dict[str, Any], image_path: Optional[str] = None):
+        """
+        Store attraction ticket data to Google Sheets.
+
+        Args:
+            user_id: LINE user ID.
+            attraction_data: Attraction information dictionary.
+            image_path: Optional path to the attraction ticket image file.
+        """
+        if not attraction_data:
+            raise ValueError("attraction_data is required")
+
+        # Upload image and get shareable URL if image_path is provided
+        image_formula = ""
+        if image_path:
+            image_url = self.upload_and_get_image_url(image_path, user_id, 'attractions')
+            if image_url:
+                image_formula = self.get_image_formula(image_url)
+
+        row = [
+            user_id,
+            attraction_data.get("AttractionID", ""),
+            attraction_data.get("AttractionName", ""),
+            attraction_data.get("AttractionAddress", ""),
+            attraction_data.get("VisitDate", ""),
+            attraction_data.get("VisitTime", ""),
+            attraction_data.get("TicketType", ""),
+            attraction_data.get("Quantity", ""),
+            attraction_data.get("TotalAmount", ""),
+            image_formula,
+            self._now(),
+        ]
+        self.attractions_ws.append_row(row, value_input_option="USER_ENTERED")
 
     def receipt_exists(self, user_id: str, receipt_id: str) -> bool:
         if not receipt_id:
@@ -366,6 +473,16 @@ class SheetsStorage:
         if not ticket_id:
             return False
         return self._row_exists(self.tickets_ws, user_id, "TicketID", ticket_id)
+
+    def hotel_exists(self, user_id: str, hotel_id: str) -> bool:
+        if not hotel_id:
+            return False
+        return self._row_exists(self.hotels_ws, user_id, "HotelID", hotel_id)
+
+    def attraction_exists(self, user_id: str, attraction_id: str) -> bool:
+        if not attraction_id:
+            return False
+        return self._row_exists(self.attractions_ws, user_id, "AttractionID", attraction_id)
 
     @staticmethod
     def _row_matches(row: Dict[str, Any], user_id: str, key: str, value: str) -> bool:
@@ -380,8 +497,20 @@ class SheetsStorage:
     def get_user_snapshot(self, user_id: str) -> str:
         receipts = self._deserialize_rows(self.receipts_ws.get_all_records(), user_id, "ItemsJSON", "Items")
         tickets = self._deserialize_rows(self.tickets_ws.get_all_records(), user_id, "SegmentsJSON", "Segments")
-        payload = {"receipts": receipts, "tickets": tickets}
+        hotels = self._deserialize_rows(self.hotels_ws.get_all_records(), user_id, "RoomDetailsJSON", "RoomDetails")
+        attractions = self._get_attractions_for_user(user_id)
+        payload = {"receipts": receipts, "tickets": tickets, "hotels": hotels, "attractions": attractions}
         return json.dumps(payload, ensure_ascii=False)
+
+    def _get_attractions_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get attractions for a specific user."""
+        filtered: List[Dict[str, Any]] = []
+        for row in self.attractions_ws.get_all_records():
+            if str(row.get("UserID", "")) != user_id:
+                continue
+            data = {k: v for k, v in row.items() if k not in {"UserID", "CreatedAt"}}
+            filtered.append(data)
+        return filtered
 
     @staticmethod
     def _deserialize_rows(rows: List[Dict[str, Any]], user_id: str, serialized_key: str, target_key: str) -> List[Dict[str, Any]]:
@@ -404,6 +533,8 @@ class SheetsStorage:
     def clear_user_data(self, user_id: str):
         self._delete_rows_by_user(self.receipts_ws, user_id)
         self._delete_rows_by_user(self.tickets_ws, user_id)
+        self._delete_rows_by_user(self.hotels_ws, user_id)
+        self._delete_rows_by_user(self.attractions_ws, user_id)
 
     @staticmethod
     def _delete_rows_by_user(worksheet, user_id: str):
